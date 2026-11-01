@@ -8,6 +8,7 @@ using Newtonsoft.Json.Serialization;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.OpenSsl;
 using CertTool.Models.Dto;
+using Org.BouncyCastle.Crypto;
 using Formatting = Newtonsoft.Json.Formatting;
 
 namespace CertTool.Models.Jwk
@@ -30,8 +31,32 @@ namespace CertTool.Models.Jwk
                 using (var textReader = new StringReader(pubKey))
                 {
                     var pubKeyPemReader = new PemReader(textReader);
+                    
                     var pemObject = pubKeyPemReader.ReadObject();
-                    var keyParameters = (RsaKeyParameters)pemObject;
+                    
+                    RsaKeyParameters keyParameters = pemObject switch
+                    {
+                        // Raw RSA public key
+                        RsaKeyParameters rsaParameters => rsaParameters,
+
+                        // X.509 certificate (e.g. bart.horntvedt.com.crt.pem)
+                        Org.BouncyCastle.X509.X509Certificate certificate =>
+                            certificate.GetPublicKey() as RsaKeyParameters
+                            ?? throw new NotSupportedException(
+                                "Certificate does not contain an RSA public key."),
+
+                        // RSA key pair
+                        AsymmetricCipherKeyPair keyPair =>
+                            keyPair.Public as RsaKeyParameters
+                            ?? throw new NotSupportedException(
+                                "Key pair does not contain an RSA public key."),
+
+                        _ => throw new NotSupportedException(
+                            $"Unsupported PEM object type: {pemObject?.GetType().FullName}")
+                    };
+
+
+                    //var keyParameters2 = (RsaKeyParameters)pemObject;
                     var e = Base64UrlEncoder.Encode(keyParameters.Exponent.ToByteArrayUnsigned());
                     var n = Base64UrlEncoder.Encode(keyParameters.Modulus.ToByteArrayUnsigned());
 

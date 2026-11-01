@@ -55,7 +55,11 @@ namespace CertTool.Backend.LetsEncrypt.Entities
 
         public byte[] GenerateCrt(string password)
         {
-            return CertificateBuilder.Generate(Key.ToRSA(), RequireChain(), password, X509ContentType.Cert);
+            var chain = RequireChain();
+
+            // The first certificate returned by Let's Encrypt is the leaf.
+            return chain.Certificates[0].Bytes;
+            //return CertificateBuilder.Generate(Key.ToRSA(), RequireChain(), password, X509ContentType.Cert);
         }
 
         public string GenerateCrtPem(string password)

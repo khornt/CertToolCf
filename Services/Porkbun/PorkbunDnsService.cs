@@ -11,27 +11,44 @@ public sealed class PorkbunDnsService(HttpClient http, AppConfig config)
 {
     private static readonly Uri BaseUri = new("https://api.porkbun.com/api/json/v3/");
 
-    private (string Zone, string Name) ResolveName(string fullName)
+    private static (string Zone, string Name) ResolveName(string fqdn)
     {
-        var zone = config.PorkbunDomain.Trim().TrimEnd('.').ToLowerInvariant();
-        var name = fullName.Trim().TrimEnd('.').ToLowerInvariant();
-        if (string.IsNullOrWhiteSpace(zone))
-            throw new InvalidOperationException("Set PorkbunDomain in App.config (for example example.com).");
-        if (name != zone && !name.EndsWith("." + zone, StringComparison.Ordinal))
-            throw new InvalidOperationException($"Challenge name '{name}' is not within Porkbun zone '{zone}'.");
-        return (zone, name == zone ? "" : name[..^(zone.Length + 1)]);
-    }
+        fqdn = fqdn.Trim().TrimEnd('.').ToLowerInvariant();
 
+        const string prefix = "_acme-challenge.";
+
+        if (fqdn.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            fqdn = fqdn[prefix.Length..];
+
+        var parts = fqdn.Split('.');
+
+        if (parts.Length < 2)
+            throw new ArgumentException("Invalid FQDN.", nameof(fqdn));
+
+        var zone = string.Join(".", parts[^2..]);
+
+        var name = parts.Length == 2
+            ? "_acme-challenge"
+            : "_acme-challenge." + string.Join(".", parts[..^2]);
+
+        return (zone, name);
+    }
+    
     private async Task<JsonDocument> SendAsync(string relativePath, object? payload = null, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(config.PorkbunApiKey) || string.IsNullOrWhiteSpace(config.PorkbunSecretApiKey))
-            throw new InvalidOperationException("Porkbun credentials are missing. Set PORKBUN_API_KEY and PORKBUN_SECRET_API_KEY environment variables.");
+        {
+            throw new InvalidOperationException(
+                "Porkbun credentials are missing. Set PORKBUN_API_KEY and PORKBUN_SECRET_API_KEY environment variables.");
+        }
+
         using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(BaseUri, relativePath));
         request.Headers.Add("X-API-Key", config.PorkbunApiKey);
         request.Headers.Add("X-Secret-API-Key", config.PorkbunSecretApiKey);
         request.Content = JsonContent.Create(payload ?? new { });
         using var response = await http.SendAsync(request, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException($"Porkbun API returned HTTP {(int)response.StatusCode}.");
         var document = JsonDocument.Parse(body);

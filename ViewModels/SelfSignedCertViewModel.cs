@@ -1,8 +1,4 @@
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using CertTool.Backend.OAuthTest;
 using CertTool.Commands;
-using CertTool.Models.Dto;
 using CertTool.Services;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -14,10 +10,8 @@ namespace CertTool.ViewModels
 {
     public class SelfSignedCertViewModel : ViewModelBase
     {
-        public ICommand TokenCommand { get; private set; }
         public ICommand SelfSignedCertCommand { get; private set; }
         private readonly INavigationService _navigationService;
-        private readonly TokenService _tokenService;
         
         public Array Algorithms { get; } = Enum.GetValues(typeof(CertificateGenerator.KeyAlgorithm));
         public string[] SignatureHashes { get; } = ["SHA256", "SHA384", "SHA512"];
@@ -63,27 +57,12 @@ namespace CertTool.ViewModels
         private string _rootPwd = string.Empty;
         private string _certPwd = string.Empty;
         
-        public SelfSignedCertViewModel(NavigationService<SelfSignedCertViewModel> navigationService, TokenService tokenService)
+        public SelfSignedCertViewModel(NavigationService<SelfSignedCertViewModel> navigationService)
         {
             _navigationService = navigationService;
-            _tokenService = tokenService;
-            TokenCommand = new TaskDelegateCommand(ExecuteTokenCommand, CanExecute);
             SelfSignedCertCommand = new TaskDelegateCommand(ExecuteCreateSertificateCommand, CanExecute);
         }
 
-        private async Task ExecuteTokenCommand()
-        {
-            
-
-            var response = await _tokenService.GetToken();
-            
-            if (response is null) return;
-
-            string formattedJson = JToken.Parse(response).ToString(Formatting.Indented);
-
-            await PlatformDialogs.CopyAsync(formattedJson);
-        }
-        
         private async Task ExecuteCreateSertificateCommand()
         {
             var pfxFilePath = await PlatformDialogs.SelectFolderAsync();

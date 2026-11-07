@@ -21,13 +21,18 @@ namespace CertTool.Backend.OAuthTest
             _jsonSerializerSettings = JsonFormatter();
         }
 
-        public async Task<string?> GetToken()
+        public async Task<string?> GetToken(string tokenEndpoint, string clientId, string certificateThumbprint, string kid)
         {
-            var tokenEndpoint = Environment.GetEnvironmentVariable("CERTTOOL_TOKEN_ENDPOINT") ?? "https://auth.horntvedt.com/realms/master/protocol/openid-connect/token";
+            if (string.IsNullOrWhiteSpace(tokenEndpoint) ||
+                !Uri.TryCreate(tokenEndpoint, UriKind.Absolute, out var endpointUri) ||
+                endpointUri.Scheme != Uri.UriSchemeHttps)
+                throw new ArgumentException("Enter a valid HTTPS token endpoint.", nameof(tokenEndpoint));
+            if (string.IsNullOrWhiteSpace(clientId))
+                throw new ArgumentException("Client ID must not be empty.", nameof(clientId));
+            if (string.IsNullOrWhiteSpace(certificateThumbprint))
+                throw new ArgumentException("Certificate thumbprint must not be empty.", nameof(certificateThumbprint));
 
-            var clientId = Environment.GetEnvironmentVariable("CERTTOOL_CLIENT_ID") ?? "my-api-client";
-            
-            var creds = GetSigningCredentials();
+            var creds = GetSigningCredentials(certificateThumbprint);
             var now = DateTimeOffset.UtcNow;
 
             var jwt = new JwtSecurityToken(
@@ -43,7 +48,11 @@ namespace CertTool.Backend.OAuthTest
                 signingCredentials: creds
             );
 
-            jwt.Header["kid"] = Environment.GetEnvironmentVariable("CERTTOOL_CERT_THUMBPRINT") ?? "4A6820E3E9CA31C4696E9672C60D0D7E0B7F3CB4";
+            // KID is independent from the certificate thumbprint and has no default.
+            // A blank KID means no kid header is sent.
+            jwt.Header.Remove("kid");
+            if (!string.IsNullOrWhiteSpace(kid))
+                jwt.Header["kid"] = kid;
             jwt.Header.Remove("x5t");
 
             var handler = new JwtSecurityTokenHandler();
@@ -67,12 +76,10 @@ namespace CertTool.Backend.OAuthTest
                 ["client_assertion"] = clientAssertion
             });
                         
-            var response = _httpClient.Value.PostAsync(tokenEndpoint, payload).Result;
-            var responseContent = response.Content.ReadAsStringAsync().Result;
+            using var response = await _httpClient.Value.PostAsync(tokenEndpoint, payload);
+            var responseContent = await response.Content.ReadAsStringAsync();
             if (response.IsSuccessStatusCode)
             {
-                var tokenResponse = JsonConvert.DeserializeObject<TokenResponseDto>(responseContent, _jsonSerializerSettings);
-                Console.WriteLine($"Access Token: {tokenResponse.AccessToken}"); 
                 return responseContent;
             }
             else
@@ -84,37 +91,26 @@ namespace CertTool.Backend.OAuthTest
             return null;
         }
 
-     private X509SigningCredentials GetSigningCredentials()
-        {
-            // Portable option: use a PFX file instead of an OS certificate store.
-            var pfxPath = Environment.GetEnvironmentVariable("CERTTOOL_SIGNING_PFX");
-            if (!string.IsNullOrWhiteSpace(pfxPath))
-            {
-                var password = Environment.GetEnvironmentVariable("CERTTOOL_SIGNING_PFX_PASSWORD");
-                var cert = X509CertificateLoader.LoadPkcs12FromFile(pfxPath, password);
-                return new X509SigningCredentials(cert, SecurityAlgorithms.RsaSha256);
-            }
-            X509Certificate2? signingCert;
+     private static X509SigningCredentials GetSigningCredentials(string certificateThumbprint)
+     {
+         // The thumbprint comes from the OAuth Token page, never from the environment.
+         using var store = new X509Store(StoreName.My, StoreLocation.LocalMachine);
+         store.Open(OpenFlags.ReadOnly);
+         var signingCert = store.Certificates
+             .OfType<X509Certificate2>()
+             .FirstOrDefault(x => string.Equals(
+                 x.Thumbprint?.Replace(" ", ""),
+                 certificateThumbprint.Replace(" ", ""),
+                 StringComparison.OrdinalIgnoreCase));
 
-            using (var certificateStore = new X509Store(StoreLocation.LocalMachine))
-            {
+         if (signingCert is null)
+             throw new InvalidOperationException(
+                 $"Signing certificate {certificateThumbprint} not found in LocalMachine/My.");
+         if (!signingCert.HasPrivateKey)
+             throw new InvalidOperationException("Signing certificate has no private key.");
 
-                var thumbprint = Environment.GetEnvironmentVariable("CERTTOOL_CERT_THUMBPRINT") ?? "4a6820e3e9ca31c4696e9672c60d0d7e0b7f3cb4";
-
-                certificateStore.Open(OpenFlags.ReadOnly);
-
-                signingCert = certificateStore.Certificates
-                    .FirstOrDefault(x => string.Equals(
-                        x.Thumbprint, thumbprint,
-                        StringComparison.CurrentCultureIgnoreCase));
-                
-                certificateStore.Close();
-            }
-
-            var signingCred = new X509SigningCredentials(signingCert, SecurityAlgorithms.RsaSha256);
-            return signingCred;
-        }
-    
+         return new X509SigningCredentials(signingCert, SecurityAlgorithms.RsaSha256);
+     }
 
      private JsonSerializerSettings JsonFormatter()
         {

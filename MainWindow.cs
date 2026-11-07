@@ -68,6 +68,9 @@ public sealed class MainWindow : Window
         tabs.Children.Add(
             NavButton("Self-signed", ShowSelfSigned));
 
+        tabs.Children.Add(
+            NavButton("OAuth Token", ShowToken));
+
         Grid.SetRow(tabs, 0);
         layout.Children.Add(tabs);
 
@@ -523,12 +526,51 @@ public sealed class MainWindow : Window
             HorizontalAlignment = HorizontalAlignment.Left
         });
 
+        _content.Content = panel;
+    }
+
+    private void ShowToken()
+    {
+        var vm = _services.GetRequiredService<TokenViewModel>();
+        var panel = Panel();
+
+        panel.Children.Add(Heading("OAuth token"));
+
+        Field(panel, "Token endpoint",
+            BoundText(() => vm.TokenEndpoint, value => vm.TokenEndpoint = value));
+        Field(panel, "Client ID",
+            BoundText(() => vm.ClientId, value => vm.ClientId = value));
+        Field(panel, "Certificate thumbprint",
+            BoundText(() => vm.CertificateThumbprint, value => vm.CertificateThumbprint = value));
+        // Field(panel, "KID (JWT header, optional)",
+        //     BoundText(() => vm.Kid, value => vm.Kid = value));
+
         panel.Children.Add(new Button
         {
             Content = "Get token and copy JSON",
             Command = vm.TokenCommand,
             HorizontalAlignment = HorizontalAlignment.Left
         });
+
+        // Match the read-only output area on the PEM / JWK page.
+        var output = new TextBox
+        {
+            IsReadOnly = true,
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Height = 300,
+            Text = vm.TokenJson
+        };
+
+        ConfigureTextBoxScrolling(output);
+        panel.Children.Add(output);
+
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(vm.TokenJson))
+                output.Text = vm.TokenJson;
+        };
 
         _content.Content = panel;
     }

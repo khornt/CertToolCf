@@ -39,6 +39,7 @@ public class App : Application
         services.AddTransient<CreateCertificateViewModel>();
         services.AddTransient<PemConverterViewModel>();
         services.AddTransient<SelfSignedCertViewModel>();
+        services.AddTransient<TokenViewModel>();
         services.AddHttpClient<PorkbunDnsService>();
         services.AddSingleton<DnsPropagationService>();
         services.AddSingleton<AcmeAccountRepository>();

@@ -45,6 +45,7 @@ public class App : Application
         services.AddSingleton<AcmeAccountRepository>();
         services.AddSingleton<IAcmeService, AcmeService>();
         services.AddSingleton<TokenService>();
+        services.AddSingleton<TokenValidationService>();
         services.AddSingleton(new AcmeClient(ApiEnvironment.LetsEncryptV2));
         services.AddSingleton<LocalStorage>();
         services.AddSingleton<CertificateExportService>();

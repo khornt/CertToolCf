@@ -71,7 +71,10 @@ namespace CertTool.Models.Jwk
                         Alg = rsaKey
                     };
 
-                    jwk = JsonConvert.SerializeObject(jsonWebKey, _jsonFormatter);
+                    // Keycloak imports a JWKS document, not a standalone JWK.
+                    // Both the preview and Save JWK use this serialized result.
+                    jwk = JsonConvert.SerializeObject(
+                        new { keys = new[] { jsonWebKey } }, _jsonFormatter);
 
                     return new JwkResponse { DigDirJwkString = jwk, Success = true, ErrorCode = null };
 

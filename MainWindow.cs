@@ -542,15 +542,28 @@ public sealed class MainWindow : Window
             BoundText(() => vm.ClientId, value => vm.ClientId = value));
         Field(panel, "Certificate thumbprint",
             BoundText(() => vm.CertificateThumbprint, value => vm.CertificateThumbprint = value));
-        // Field(panel, "KID (JWT header, optional)",
-        //     BoundText(() => vm.Kid, value => vm.Kid = value));
+        Field(panel, "KID (JWT header, optional)",
+            BoundText(() => vm.Kid, value => vm.Kid = value));
 
-        panel.Children.Add(new Button
+        Field(panel, "Expected audience (aud)",
+            BoundText(() => vm.ExpectedAudience, value => vm.ExpectedAudience = value));
+
+        var tokenActions = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 10
+        };
+        tokenActions.Children.Add(new Button
         {
             Content = "Get token and copy JSON",
-            Command = vm.TokenCommand,
-            HorizontalAlignment = HorizontalAlignment.Left
+            Command = vm.TokenCommand
         });
+        tokenActions.Children.Add(new Button
+        {
+            Content = "Validate locally",
+            Command = vm.ValidateTokenCommand
+        });
+        panel.Children.Add(tokenActions);
 
         // Match the read-only output area on the PEM / JWK page.
         var output = new TextBox
@@ -564,12 +577,28 @@ public sealed class MainWindow : Window
         };
 
         ConfigureTextBoxScrolling(output);
+        panel.Children.Add(new TextBlock { Text = "Token response (JSON)" });
         panel.Children.Add(output);
+
+        var validation = new TextBox
+        {
+            IsReadOnly = true,
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Height = 160,
+            Text = vm.ValidationResult
+        };
+        ConfigureTextBoxScrolling(validation);
+        panel.Children.Add(new TextBlock { Text = "Validation result" });
+        panel.Children.Add(validation);
 
         vm.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(vm.TokenJson))
                 output.Text = vm.TokenJson;
+            if (e.PropertyName == nameof(vm.ValidationResult))
+                validation.Text = vm.ValidationResult;
         };
 
         _content.Content = panel;
